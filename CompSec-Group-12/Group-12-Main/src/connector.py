@@ -163,7 +163,7 @@ def collect_client_file():
         file_name = input("Enter filename: ")
         try:
             #file = open("../data/" + file_name)
-            file = open("C:/Users/gzmn0/OneDrive/Masaüstü/Most-Secure-Application-main/Most-Secure-Application-main/data/" + file_name)
+            file = open("C:/Users/gzmn0/OneDrive/Masaüstü/CS-GITHUB/computer-security/CompSec-Group-12/Group-12-Main/data/" + file_name)
             try:
                 data = json.load(file)
                 file.close()
