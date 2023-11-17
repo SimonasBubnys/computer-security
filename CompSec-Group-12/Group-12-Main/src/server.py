@@ -8,6 +8,7 @@ import base64
 import json
 import time
 import re
+from datetime import datetime
 
 SCHEMA = Schema({
     'id': str,
@@ -87,14 +88,14 @@ def handle_actions(id: str, actions: list, delay: int):
             with conn_details_lock:
                 current_connection_counters[id] += amount[0]
                 with open("logfile.txt", "a") as logfile:
-                    logfile.write(f"{id}\t\tINCREASE {amount[0]}\t\t{current_connection_counters[id]}\n")
+                    logfile.write(f"{id}\t\tINCREASE {amount[0]}\t\t{current_connection_counters[id]}\t\t{datetime.now()}\n")
                 print(f"Increase by {amount[0]} and counter for id - {id} is now: {current_connection_counters[id]}")
         elif "DECREASE" in action:
             amount = [int(s) for s in action.split() if s.isdigit()]
             with conn_details_lock:
                 current_connection_counters[id] -= amount[0]
                 with open("logfile.txt", "a") as logfile:
-                    logfile.write(f"{id}\t\tDECREASE {amount[0]}\t\t{current_connection_counters[id]}\n")
+                    logfile.write(f"{id}\t\tDECREASE {amount[0]}\t\t{current_connection_counters[id]}\t\t{datetime.now()}\n")
                 print(f"Decrease by {amount[0]} and counter for id - {id} is now: {current_connection_counters[id]}")
         i += 1
         if i < final:
@@ -122,7 +123,7 @@ def handle_json(msg: str, conn):
         # print(current_id_total)
         add_conn_details(id, password)
         with open("logfile.txt", "a") as logfile:
-            logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\n")
+            logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\t\t{datetime.now()}\n")
         handle_actions(id, actions, delay)
         # print(f"ID : {id}\nPASSWORD : {password}\nACTIONS : {actions}\nDELAY : {delay}")
     else:
@@ -131,7 +132,7 @@ def handle_json(msg: str, conn):
                 current_id_total[id] += 1
             # print(current_id_total)
             with open("logfile.txt", "a") as logfile:
-                logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\n")
+                logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\t\t{datetime.now()}\n")
             handle_actions(id, actions, delay)
             # print(f"ID : {id}\nPASSWORD : {password}\nACTIONS : {actions}\nDELAY : {delay}")
         else:
@@ -139,7 +140,7 @@ def handle_json(msg: str, conn):
                 "\nACCESS DENIED: Another user with same ID already logged in with different password...\n", conn)
 
     with open("logfile.txt", "a") as logfile:
-        logfile.write(f"{id}\t\tLogged Out\t\t{current_connection_counters[id]}\n")
+        logfile.write(f"{id}\t\tLogged Out\t\t{current_connection_counters[id]}\t\t{datetime.now()}\n")
     remove_conn_details(id)
 
 
@@ -217,7 +218,7 @@ def start_server():
     print(f"Server [{SERVER}:{PORT}] started.")
     open("logfile.txt", "w").close()  # Clear logfile contents from last session
     with open("logfile.txt", "a") as logfile:
-        logfile.write("ID\t\t\tAction\t\t\tCounter Value:\n")  # Add header
+        logfile.write("ID\t\t\tAction\t\t\tCounter Value\t\t\tDate\n")  # Add header
     while True:
         conn, addr = server.accept()
         thread = threading.Thread(target=handle_client, args=(conn, addr))
