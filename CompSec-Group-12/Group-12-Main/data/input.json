@@ -9,7 +9,8 @@
         "delay": "3",
         "steps": [
             "INCREASE 8",
-            "DECREASE 2"
+            "DECREASE 2",
+            "DECREASE 6"
         ]
     }
 }
