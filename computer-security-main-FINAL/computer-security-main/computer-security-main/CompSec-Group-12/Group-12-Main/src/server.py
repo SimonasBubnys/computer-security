@@ -106,7 +106,7 @@ def handling(msg: str, conn):
         conn_det_change(id, password)
         with open("logfile.txt", "a") as logfile:
             logfile.write(
-                f"{id}\t\tSign-in completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                f"{id}\t\t\tSign-in \t\t\t{id_total_collector[id]}\t\t\t{datetime.now()}\n")
         # Handle the specified actions
         handle_actions(id, actions, delay)
     else:
@@ -117,7 +117,7 @@ def handling(msg: str, conn):
                 id_accumulator[id] += 1
             with open("logfile.txt", "a") as logfile:
                 logfile.write(
-                    f"{id}\t\tSign-in completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                    f"{id}\t\t\tSign-in \t\t\t{id_total_collector[id]}\t\t\t{datetime.now()}\n")
             # Handle the specified actions
             handle_actions(id, actions, delay)
         else:
@@ -128,7 +128,7 @@ def handling(msg: str, conn):
     # Log the sign-out and remove user details
     with open("logfile.txt", "a") as logfile:
         logfile.write(
-            f"{id}\t\tSign-out completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+            f"{id}\t\t\tSign-out\t\t\t{id_total_collector[id]}\t\t\t{datetime.now()}\n")
     con_det_delete(id)
 
 
@@ -165,7 +165,7 @@ def start_server():
     # Clear and initialize the logfile
     open("logfile.txt", "w").close()
     with open("logfile.txt", "a") as logfile:
-        logfile.write("ID\t\t\tAction\t\t\tCounter Value\t\t\tDate\n")
+        logfile.write("ID\t\t\t\tAction\t\t\t\tCounter\t\tDate\n")
 
     # Accept and handle incoming connections
     while True:
@@ -189,7 +189,7 @@ def handle_actions(id: str, actions: list, delay: int):
                 # Log the increase action to a file
                 with open("logfile.txt", "a") as logfile:
                     logfile.write(
-                        f"{id}\t\tAugment {counter1[0]}\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                        f"{id}\t\t\tIncrease\t\t\t{id_total_collector[id]}\t\t\t{datetime.now()}\n")
                 # Print the updated connection count
                 print(
                     f"Augment by {counter1[0]}, the counter for id - {id} is now: {id_total_collector[id]}")
@@ -202,7 +202,7 @@ def handle_actions(id: str, actions: list, delay: int):
                 # Log the decrease action to a file
                 with open("logfile.txt", "a") as logfile:
                     logfile.write(
-                        f"{id}\t\Reduced {counter1[0]}\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                        f"{id}\t\t\tDecrease\t\t\t{id_total_collector[id]}\t\t\t{datetime.now()}\n")
                 # Print the updated connection count
                 print(
                     f"Decreased by {counter1[0]}, the counter for ID - {id} is now: {id_total_collector[id]}")

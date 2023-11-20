@@ -6,6 +6,7 @@ import ipaddress
 import socket
 import base64
 import json
+import settings
 
 # Define the schema for the JSON structure
 Structure = Schema({
@@ -145,8 +146,7 @@ def cl_file_locate():
         file_name = input("Input filename: ")
         try:
             # Attempt to open the file at the specified path
-            file = open(
-                "C:/Users/gzmn0/OneDrive/Masaüstü/CS-GITHUB/computer-security/CompSec-Group-12/Group-12-Main/data/" + file_name)
+            file = open(settings.data_path + file_name)
             try:
                 # Attempt to load JSON data from the file
                 data = json.load(file)
