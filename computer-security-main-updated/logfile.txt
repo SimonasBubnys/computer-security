@@ -1,5 +1,0 @@
-ID			Action			Counter Value			Date
-1111		Sign-in completed		0		2023-11-20 15:33:48.829080
-1111		Augment 8		8		2023-11-20 15:33:48.830131
-1111	\Reduced 2		6		2023-11-20 15:33:48.830131
-1111		Sign-out completed		6		2023-11-20 15:33:48.831138
