@@ -1,11 +1,6 @@
-import pip
-
-pip.main(['install', 'schema'])
-pip.main(['install', 'cryptography'])
-
-from schema import Schema, Use, SchemaError
 from cryptography.fernet import Fernet as fern
 from required import messageFormating as mf
+from schema import Schema, Use, SchemaError
 from random import randint
 import socket
 import threading
@@ -15,7 +10,7 @@ import time
 import re
 from datetime import datetime
 
-SCHEMA = Schema({
+Structure = Schema({
     'id': str,
     'password': str,
     'server': {
@@ -29,224 +24,219 @@ SCHEMA = Schema({
 })
 
 
-def validate_actions(json_str: str):
-    """ Validates the data that was sent to the server. Checks especially if the actions are in the right format
+def key_change(conn):
+    # Calculate public key using Diffie-Hellman key exchange
+    key_pub = (G ** PRIVATE_VALUE) % P
+    # Encode and send the public key to the server using mf
+    mf.msg_enc(str(key_pub), conn)
+    # Receive the server's public key, decode it, and convert it to an integer
+    public_key_server = int(mf.msg_dec(conn))
+    # Calculate the shared private key
+    key_priv = (public_key_server ** PRIVATE_VALUE) % P
+    # Return the derived key after base64 encoding
+    return fern(base64.urlsafe_b64encode(key_priv.to_bytes(32, byteorder="big")))
 
-    Args:
-        json_str (str): The Json data as a string
 
-    Returns:
-        bool: True if the data is valid, False if not
-    """
-    # check if json_str can be converted to dictionary data type
+def validation(json_str: str):
+    # Attempt to parse the input JSON string
     try:
-        json_dict = json.loads(json_str)
+        encode_message_act = json.loads(json_str)
     except json.decoder.JSONDecodeError:
+        # Return False if there's an error decoding the JSON
         return False
 
-    # check if json_dict follows SCHEMA
+    # Validate the JSON structure using a predefined schema (assuming SchemaError is defined somewhere)
     try:
-        SCHEMA.validate(json_dict)
+        Structure.validate(json_act)
     except SchemaError:
+        # Return False if the structure does not match the expected schema
         return False
 
-    # check if [steps] are in correct format
-    for step in json_dict['actions']['steps']:
+    # Iterate over the 'steps' in the 'actions' key of the JSON
+    for step in json_act['actions']['steps']:
         try:
+            # Check if the step matches the pattern 'INCREASE \d' or 'DECREASE \d'
             if re.compile('INCREASE \\d').match(step) is None and re.compile('DECREASE \\d').match(step) is None:
+                # Return False if the step does not match the expected pattern
                 return False
         except TypeError:
+            # Return False if there's a TypeError during the regular expression matching
             return False
 
+    # Return True if all checks pass
     return True
 
 
-def exchange_key(conn):
-    """Performs a Diffie Hellman key exchange
+def check_pass(pas1: str, pas2: str):
+    # Check if passwords match
+    return pas1 == pas2
 
-    Args:
-        conn (socket): The socket that tries to connect
-
-    Returns:
-        key: The fernet key
-    """
-    public_key = (G ** PRIVATE_VALUE) % P  # Create the public part to be exchanged.
-    mf.encode_message(str(public_key), conn)  # Send to client.
-    server_public_key = int(mf.decode_message(conn))  # Receive public part from client.
-    private_key = (server_public_key ** PRIVATE_VALUE) % P  # Create the private key using public client part and private value.
-    return fern(base64.urlsafe_b64encode(private_key.to_bytes(32, byteorder="big")))  # Return a fernet key generated from the private key.
+def conn_det_change(id: str, password: str):
+    # Update the user's password and reset counters
+    pass_con_now[id] = password
+    id_total_collector[id] = 0
 
 
-def handle_actions(id: str, actions: list, delay: int):
-    """ Handles the actions specified in the json file from the client and operates on the specific counter
-
-    Args:
-        id (str): The id of the client
-        actions (str): The actions that the client wants to perform. E.g. "Increase 5"
-        delay (int): The delay between 2 actions
-    """
-    i = 0
-    final = len(actions)
-    for action in actions:
-        if "INCREASE" in action:
-            amount = [int(s) for s in action.split() if s.isdigit()]
-            with conn_details_lock:
-                current_connection_counters[id] += amount[0]
-                with open("logfile.txt", "a") as logfile:
-                    logfile.write(f"{id}\t\tINCREASE {amount[0]}\t\t{current_connection_counters[id]}\t\t\t{datetime.now()}\n")
-                print(f"Increase by {amount[0]} and counter for id - {id} is now: {current_connection_counters[id]}")
-        elif "DECREASE" in action:
-            amount = [int(s) for s in action.split() if s.isdigit()]
-            with conn_details_lock:
-                current_connection_counters[id] -= amount[0]
-                with open("logfile.txt", "a") as logfile:
-                    logfile.write(f"{id}\t\tDECREASE {amount[0]}\t\t{current_connection_counters[id]}\t\t\t{datetime.now()}\n")
-                print(f"Decrease by {amount[0]} and counter for id - {id} is now: {current_connection_counters[id]}")
-        i += 1
-        if i < final:
-            if delay > 1000000: # Stop conversion error with big delays
-                delay = 1000000
-            time.sleep(delay)
+def con_det_delete(id: str):
+    # Delete user details and counters when signing out
+    global id_accumulator
+    with counter_lock:
+        if id_accumulator[id]:
+            if id_accumulator[id] > 1:
+                id_accumulator[id] -= 1
+            elif id_accumulator[id] == 1:
+                id_accumulator.pop(id)
+                id_total_collector.pop(id)
+                pass_con_now.pop(id)
 
 
-def handle_json(msg: str, conn):
-    """ Handles the file that was sent by the client.
-
-    Args:
-        msg (str): The message that the client sent
-        conn (socket): The socket of the client
-    """
+def handling(msg: str, conn):
+    # Parse the incoming JSON message
     data = json.loads(msg)
     id = data["id"]
     password = data["password"]
     actions = data["actions"]["steps"]
     delay = int(data["actions"]["delay"])
 
-    if id not in current_connection_passwords:
-        with id_total_lock:
-            current_id_total[id] = 1
-        # print(current_id_total)
-        add_conn_details(id, password)
+    # Check if the user is not already in the system
+    if id not in pass_con_now:
+        # Initialize the user's counters and log the sign-in
+        with counter_lock:
+            id_accumulator[id] = 1
+        conn_det_change(id, password)
         with open("logfile.txt", "a") as logfile:
-            logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\t\t\t{datetime.now()}\n")
+            logfile.write(
+                f"{id}\t\tSign-in completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+        # Handle the specified actions
         handle_actions(id, actions, delay)
-        # print(f"ID : {id}\nPASSWORD : {password}\nACTIONS : {actions}\nDELAY : {delay}")
     else:
-        if check_password(current_connection_passwords[id], password):
-            with id_total_lock:
-                current_id_total[id] += 1
-            # print(current_id_total)
+        # If the user is already in the system, check the password
+        if check_pass(pass_con_now[id], password):
+            # Increment the user's counters and log the sign-in
+            with counter_lock:
+                id_accumulator[id] += 1
             with open("logfile.txt", "a") as logfile:
-                logfile.write(f"{id}\t\tLogged In\t\t{current_connection_counters[id]}\t\t\t{datetime.now()}\n")
+                logfile.write(
+                    f"{id}\t\tSign-in completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+            # Handle the specified actions
             handle_actions(id, actions, delay)
-            # print(f"ID : {id}\nPASSWORD : {password}\nACTIONS : {actions}\nDELAY : {delay}")
         else:
+            # If the password is incorrect, send an access denied message
             mf.encode_message(
-                "\nACCESS DENIED: Another user with same ID already logged in with different password...\n", conn)
+                "\nAccess Denied: Another user with the same ID is currently logged in with a different password\n", conn)
 
+    # Log the sign-out and remove user details
     with open("logfile.txt", "a") as logfile:
-        logfile.write(f"{id}\t\tLogged Out\t\t{current_connection_counters[id]}\t\t\t{datetime.now()}\n")
-    remove_conn_details(id)
+        logfile.write(
+            f"{id}\t\tSign-out completed\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+    con_det_delete(id)
 
 
-def add_conn_details(id: str, password: str):
-    """ Updates the dictionaries with the details of a new client
+def process_client(conn, addr):
+    # Establish a new connection and generate a key for communication encryption
+    key = key_change(conn)
+    print(f"\nEstablishing a new connection {addr}\n.")
 
-    Args:
-        id (str): The id of the client
-        password (str): The password of the client
-    """
-    current_connection_passwords[id] = password
-    current_connection_counters[id] = 0
-
-
-def remove_conn_details(id: str):
-    """ Removes the details of a client once it disconnects
-
-    Args:
-        id (str): The id of the client
-    """
-    global current_id_total
-    with id_total_lock:
-        if current_id_total[id]:
-            if current_id_total[id] > 1:
-                current_id_total[id] -= 1
-            elif current_id_total[id] == 1:
-                current_id_total.pop(id)
-                current_connection_counters.pop(id)
-                current_connection_passwords.pop(id)
-
-
-def check_password(password1: str, password2: str):
-    """ Checks if two passwords are matching
-
-    Args:
-        password1 (str): The first password
-        password2 (str): The second password
-
-    Returns:
-        bool: True if passwords match, False if not
-    """
-    return password1 == password2
-
-
-def handle_client(conn, addr):
-    """ Handles a client once it connects to the server. Each instance of this function is run in a different thread.
-
-    Args:
-        conn (socket): The socket of the client
-        addr (tuple): The address details of the client
-    """
-
-    key = exchange_key(conn)
-    print(f"\nNew Connection {addr}\n")
+    # Process incoming messages until the client signals to disconnect
     while True:
-        message = mf.receive_decrypt(conn, key)
+        message = mf.dec_rec(conn, key)
         if message == DISCONNECT:
             break
         elif message != "":
-            # print(f"{addr}: {message}")
-            if validate_actions(message):
-                handle_json(message, conn)
-                mf.encrypt_send("Message Received!", conn, key)
+            # If the message is valid, handle it
+            if validation(message):
+                handling(message, conn)
+                mf.s_encr("Message has been received!", conn, key)
             else:
-                mf.encrypt_send("Incorrect data and/or data format, please try again.", conn, key)
-    print(f"\nConnection closed {addr}\n")
+                # If the message is invalid, send an error message
+                mf.s_encr(
+                    "Invalid data or data format. Please try again.", conn, key)
+
+    # Close the connection when done
+    print(f"\nClosing the connection {addr}\n.")
     conn.close()
 
 
 def start_server():
-    """ Starts the server
-    """
-
+    # Start listening for incoming connections
     server.listen()
-    print(f"Server [{SERVER}:{PORT}] started.")
-    open("logfile.txt", "w").close()  # Clear logfile contents from last session
+    print(f"Server at {SERVER}:{PORT} initiated.")
+
+    # Clear and initialize the logfile
+    open("logfile.txt", "w").close()
     with open("logfile.txt", "a") as logfile:
-        logfile.write("ID\t\t\tAction\t\t\tCounter \tDate\n")  # Add header
+        logfile.write("ID\t\t\tAction\t\t\tCounter Value\t\t\tDate\n")
+
+    # Accept and handle incoming connections
     while True:
         conn, addr = server.accept()
-        thread = threading.Thread(target=handle_client, args=(conn, addr))
+        thread = threading.Thread(target=process_client, args=(conn, addr))
         thread.start()
 
 
+def handle_actions(id: str, actions: list, delay: int):
+    k = 0
+    const = len(actions)
+
+    # Iterate through each action in the list
+    for action in actions:
+        if "INCREASE" in action:
+            # Extract the numeric value from the action string
+            counter1 = [int(s) for s in action.split() if s.isdigit()]
+            # Update the connection count with the extracted value
+            with conn_details_lock:
+                id_total_collector[id] += counter1[0]
+                # Log the increase action to a file
+                with open("logfile.txt", "a") as logfile:
+                    logfile.write(
+                        f"{id}\t\tAugment {counter1[0]}\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                # Print the updated connection count
+                print(
+                    f"Augment by {counter1[0]}, the counter for id - {id} is now: {id_total_collector[id]}")
+        elif "DECREASE" in action:
+            # Extract the numeric value from the action string
+            counter1 = [int(s) for s in action.split() if s.isdigit()]
+            # Update the connection count with the extracted value
+            with conn_details_lock:
+                id_total_collector[id] -= counter1[0]
+                # Log the decrease action to a file
+                with open("logfile.txt", "a") as logfile:
+                    logfile.write(
+                        f"{id}\t\Reduced {counter1[0]}\t\t{id_total_collector[id]}\t\t{datetime.now()}\n")
+                # Print the updated connection count
+                print(
+                    f"Decreased by {counter1[0]}, the counter for ID - {id} is now: {id_total_collector[id]}")
+
+        k += 1
+
+        # If there are more actions and delay is greater than 1000000 microseconds, sleep for 1 second
+        if k < const and delay > 1000000:
+            delay = 1000000
+            time.sleep(delay)
+
+
 if __name__ == "__main__":
+    # Server configuration
+    G = 6143
+    P = 7919
     PORT = 5050
+    PRIVATE_VALUE = randint(1, 10000)
     SERVER = "127.0.0.1"
     ADDR = (SERVER, PORT)
     DISCONNECT = "Sock It"
-    PRIVATE_VALUE = randint(1, 10000)  # Private value, random for every new client
-    G = 6143  # Public values
-    P = 7919
+     
+    # Data structures to manage connections and user information
+    id_accumulator = {}
+    id_total_collector = {}
+    pass_con_now = {}
 
-    current_connection_passwords = {}
-    current_connection_counters = {}
-    current_id_total = {}
-
+    # Locks for thread safety
     conn_details_lock = threading.Lock()
-    id_total_lock = threading.Lock()
+    counter_lock = threading.Lock()
 
+    # Create and bind the server socket
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(ADDR)
 
+    # Start the server
     start_server()
