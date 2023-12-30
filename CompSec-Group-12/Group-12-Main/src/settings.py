@@ -1,0 +1,1 @@
+data_path="C:/Users/gzmn0/OneDrive/Masaüstü/CS-FINAL/computer-security-build-it/computer-security-build-it/computer-security-main-FINAL/computer-security-main/computer-security-main/CompSec-Group-12/Group-12-Main/data/"
